@@ -10,7 +10,7 @@ workflow file).
 import os
 
 # --- What we're watching for ------------------------------------------------
-HASHTAG = os.getenv("QC_HASHTAG", "tt_event")  # without the leading '#'
+HASHTAG = os.getenv("QC_HASHTAG", "MapCupAPAC2026")  # without the leading '#'
 
 # --- OSM API -----------------------------------------------------------------
 OSM_API_BASE = os.getenv("OSM_API_BASE", "https://api.openstreetmap.org/api/0.6")
