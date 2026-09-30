@@ -1,0 +1,2 @@
+s_no,error_type,username,user_id,osm_location_link,changeset_id,changeset_link,osm_object_type,osm_object_id,time_utc,country,detail
+1,crossing buildings,Joey WS Wong,24267239,https://www.openstreetmap.org/#map=18/26.459394/90.294162,184889491,https://www.openstreetmap.org/changeset/184889491,way,1534124212,2026-07-01T02:34:14Z,India,outline crosses way 1534124213 (2% area overlap)
