@@ -4,7 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2bf29c3a-fdc7-4ac9-89df-528d6ebf3b18" name="Changes" comment="" />
+    <list default="true" id="2bf29c3a-fdc7-4ac9-89df-528d6ebf3b18" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -45,6 +47,7 @@
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="C:\Users\chukw\PycharmProjects\OSM_QC_MapCupAPAC2026" />
+      <recent name="C:\Users\chukw\PycharmProjects\OSM_QC_MapCupAPAC2026\data" />
     </key>
   </component>
   <component name="SharedIndexes">
