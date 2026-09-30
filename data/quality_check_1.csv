@@ -1,2 +1,3 @@
 s_no,error_type,username,user_id,osm_location_link,changeset_id,changeset_link,osm_object_type,osm_object_id,time_utc,country,detail
 1,crossing buildings,Joey WS Wong,24267239,https://www.openstreetmap.org/#map=18/26.459394/90.294162,184889491,https://www.openstreetmap.org/changeset/184889491,way,1534124212,2026-07-01T02:34:14Z,India,outline crosses way 1534124213 (2% area overlap)
+2,node connected highway and building,Rhikshita,24249875,https://www.openstreetmap.org/#map=18/26.873534/94.680944,184892985,https://www.openstreetmap.org/changeset/184892985,node,12376816553,2026-07-01T04:35:59Z,India,shared by highway way 613110239 and building way 1338051624
