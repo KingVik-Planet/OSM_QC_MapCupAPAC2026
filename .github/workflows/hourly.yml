@@ -1,4 +1,4 @@
-name: OSM #MapCupAPAC2026 hourly quality check
+name: OSM_QC_MapCupAPAC2026 #MapCupAPAC2026 hourly quality check
 
 on:
   schedule:
