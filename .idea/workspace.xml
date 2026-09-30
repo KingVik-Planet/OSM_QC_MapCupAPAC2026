@@ -4,8 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2bf29c3a-fdc7-4ac9-89df-528d6ebf3b18" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    <list default="true" id="2bf29c3a-fdc7-4ac9-89df-528d6ebf3b18" name="Changes" comment="Quality check run 2026-09-30 23:15 UTC">
+      <changelist_data name="osm-quality-bot" email="actions@users.noreply.github.com" automatic="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -13,6 +13,11 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="Git.Settings">
+    <option name="PREVIOUS_COMMIT_AUTHORS">
+      <list>
+        <option value="osm-quality-bot &lt;actions@users.noreply.github.com&gt;" />
+      </list>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="GitHubPullRequestSearchHistory">{
@@ -66,5 +71,9 @@
       <updated>1790725537787</updated>
     </task>
     <servers />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Quality check run 2026-09-30 23:15 UTC" />
+    <option name="LAST_COMMIT_MESSAGE" value="Quality check run 2026-09-30 23:15 UTC" />
   </component>
 </project>
