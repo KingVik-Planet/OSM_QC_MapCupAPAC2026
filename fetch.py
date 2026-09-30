@@ -1,7 +1,7 @@
 """
 Talks to the OSM API, Overpass, and (optionally) osmcha to find
-#MapCupAPAC2026 changesets in a given UTC time window, worldwide, and
-pull down the data needed to run checks on them.
+#tt_event changesets in a given UTC time window, worldwide, and pull
+down the data needed to run checks on them.
 """
 import logging
 import time
@@ -15,7 +15,7 @@ import geo_utils
 
 log = logging.getLogger(__name__)
 
-HEADERS = {"User-Agent": "osm-mapcupapac2026-quality-check/1.0"}
+HEADERS = {"User-Agent": "osm-tt-event-quality-check/1.0"}
 
 
 class OverpassUnavailable(Exception):
@@ -93,17 +93,29 @@ def _parse_osm_dt(s):
 
 def fetch_changesets_in_window(start_dt, end_dt):
     """
-    Returns a list of changeset dicts (id, uid, user, created_at,
-    closed_at, min_lat/lon, max_lat/lon, tags{}) for every changeset
-    worldwide that intersects [start_dt, end_dt) UTC and mentions the
-    configured hashtag.
+    Returns (found, unresolved) for every changeset worldwide that
+    intersects [start_dt, end_dt) UTC and mentions the configured
+    hashtag.
 
     The OSM API's /changesets endpoint returns at most 100 results per
     call and has no native hashtag filter, so this pages backwards
     through the window using the `time` parameter and filters
     client-side against the changeset's `comment` and `hashtags` tags.
+
+    IMPORTANT: if a specific page query fails persistently (already
+    retried inside _get(), still failing -- not a brief blip but a
+    genuinely stuck query, which does happen for some narrow historical
+    slices), this does NOT raise and does NOT silently drop that data.
+    Instead it stops paginating further and returns the sub-range that
+    couldn't be scanned as `unresolved`, a list of (start_iso, end_iso)
+    strings. The caller must queue these for a later retry -- e.g. via
+    storage's pending-changeset-scan queue -- rather than treat the
+    window as fully scanned. This is what stops one permanently-stuck
+    query from blocking the entire pipeline's forward progress forever,
+    while still guaranteeing that sub-range gets checked eventually.
     """
     found = {}
+    unresolved = []
     cursor_end = end_dt
     hashtag_needle = f"#{config.HASHTAG}".lower()
 
@@ -112,7 +124,18 @@ def fetch_changesets_in_window(start_dt, end_dt):
             "time": f"{start_dt.isoformat()}Z,{cursor_end.isoformat()}Z",
             "closed": "true",
         }
-        resp = _get(f"{config.OSM_API_BASE}/changesets.json", params=params)
+        try:
+            resp = _get(f"{config.OSM_API_BASE}/changesets.json", params=params)
+        except requests.RequestException as e:
+            log.warning(
+                "Persistent failure scanning changesets from %s to %s -- "
+                "queuing this slice for later retry instead of blocking "
+                "the whole window: %s",
+                start_dt.isoformat(), cursor_end.isoformat(), e,
+            )
+            unresolved.append((start_dt.isoformat(), cursor_end.isoformat()))
+            break
+
         data = resp.json().get("changesets", [])
         if not data:
             break
@@ -132,7 +155,7 @@ def fetch_changesets_in_window(start_dt, end_dt):
             break
         cursor_end = new_cursor_end
 
-    return list(found.values())
+    return list(found.values()), unresolved
 
 
 def fetch_changeset_meta(changeset_id):
