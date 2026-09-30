@@ -352,6 +352,41 @@ def fetch_live_node(node_id):
         return None
 
 
+def fetch_ways_using_node(node_id):
+    """
+    Asks Overpass directly: "what ways (anywhere on the planet) contain
+    this exact node?" -- using Overpass's own "backward node" query
+    (way(bn:NODE_ID)), which is precise and completely independent of
+    distance or bounding box.
+
+    This exists specifically to fix a false-positive source in the
+    "floating highway" check: that check's normal context comes from a
+    small (~50m) buffer around the changeset's own bounding box, so a
+    road's real neighbour sitting just outside that buffer would make a
+    genuinely-connected road look falsely isolated. This function
+    removes that blind spot entirely for the one or two endpoint nodes
+    that actually need checking, rather than widening the buffer for
+    every check (which would cost far more Overpass load for no benefit
+    elsewhere).
+
+    Returns a set of way IDs (possibly empty) that reference this node,
+    or None if the query itself failed -- callers must treat None as
+    "couldn't confirm either way", not as proof of isolation.
+    """
+    query = f"[out:json][timeout:{config.OVERPASS_QUERY_TIMEOUT_S}];way(bn:{node_id});out ids;"
+    try:
+        resp = requests.post(
+            config.OVERPASS_ENDPOINTS[0], data={"data": query}, headers=HEADERS,
+            timeout=config.OVERPASS_HTTP_TIMEOUT_S,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return {el["id"] for el in data.get("elements", []) if el["type"] == "way"}
+    except Exception as e:
+        log.info("Could not verify node %s's real connections (treated as unconfirmed): %s", node_id, e)
+        return None
+
+
 def fetch_live_way_geometry(way_id):
     """
     Re-fetches a way's CURRENT geometry directly from the live OSM API --
