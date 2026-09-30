@@ -1,5 +1,5 @@
 """
-Central configuration for the OSM #MapCupAPAC2026 quality-check pipeline.
+Central configuration for the OSM #tt_event quality-check pipeline.
 
 Everything here can be overridden with an environment variable, so the
 same code runs unchanged locally (via a .env file you load yourself,
@@ -10,7 +10,7 @@ workflow file).
 import os
 
 # --- What we're watching for ------------------------------------------------
-HASHTAG = os.getenv("QC_HASHTAG", "MapCupAPAC2026")  # without the leading '#'
+HASHTAG = os.getenv("QC_HASHTAG", "tt_event")  # without the leading '#'
 
 # --- OSM API -----------------------------------------------------------------
 OSM_API_BASE = os.getenv("OSM_API_BASE", "https://api.openstreetmap.org/api/0.6")
@@ -29,11 +29,15 @@ OVERPASS_QUERY_TIMEOUT_S = int(os.getenv("QC_OVERPASS_QUERY_TIMEOUT_S", 35))
 # how many times to retry a single mirror before moving to the next one
 OVERPASS_RETRIES = int(os.getenv("QC_OVERPASS_RETRIES", 1))
 
-# Maximum retry-queue items processed in a single run. Bounds worst-case
-# run time even when Overpass is fully healthy but the backlog has grown
-# large -- ensures the current hour's new changesets always get scanned
-# instead of being starved by an ever-growing retry queue.
+# Maximum retry-queue items processed in a single run.
 MAX_RETRY_PER_RUN = int(os.getenv("QC_MAX_RETRY_PER_RUN", 300))
+
+# Same idea, for the changeset-discovery scan-retry queue: caps how many
+# persistently-stuck time-slices get retried in a single run. Each retry
+# costs up to ~70s (the OSM-API retry wrapper's own attempts+backoff), so
+# without a cap, enough stuck slices accumulating at once could slow a
+# run down the same way an uncapped Overpass queue used to.
+MAX_SCAN_RETRY_PER_RUN = int(os.getenv("QC_MAX_SCAN_RETRY_PER_RUN", 20))
 
 # --- osmcha (optional enrichment only -- never a hard dependency) -----------
 OSMCHA_API_BASE = os.getenv("OSMCHA_API_BASE", "https://osmcha.org/api/v1")
@@ -43,7 +47,7 @@ OSMCHA_TOKEN = os.getenv("OSMCHA_TOKEN")  # set as a GitHub Actions secret
 NOMINATIM_URL = os.getenv("NOMINATIM_URL", "https://nominatim.openstreetmap.org/reverse")
 NOMINATIM_USER_AGENT = os.getenv(
     "NOMINATIM_USER_AGENT",
-    "osm-mapcupapac2026-quality-check/1.0 (set a contact email in this User-Agent)",
+    "osm-tt-event-quality-check/1.0 (set a contact email in this User-Agent)",
 )
 NOMINATIM_MIN_INTERVAL_S = 1.1  # Nominatim usage policy: max ~1 request/second
 
@@ -148,6 +152,8 @@ ENUMERATED_KEY_VALUES = {
     },
 }
 
+# Keys that count as "this feature has a real primary tag" for the
+# missing-primary-tag check.
 # Keys that count as "this feature has a real primary tag" for the
 # missing-primary-tag check. Sourced from OSM's own "Top-level tag" wiki
 # page (https://wiki.openstreetmap.org/wiki/Top-level_tag), which

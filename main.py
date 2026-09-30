@@ -144,16 +144,17 @@ def retry_pending(pending_list):
 
 def retry_pending_scans(pending_scans):
     """
-    Retries each time-range that a previous run couldn't scan for
-    changesets because the underlying OSM API query itself persistently
-    failed (see fetch_changesets_in_window's `unresolved` return value).
+    Retries time-ranges that a previous run couldn't scan for changesets
+    because the underlying OSM API query itself persistently failed
+    (see fetch_changesets_in_window's `unresolved` return value).
 
-    Unlike the Overpass retry queue, there's no per-run cap here --
-    these ranges are expected to be rare and narrow (a single stuck
-    slice, not thousands of items), so processing all of them each run
-    is cheap. Never capped on attempts either: a range only leaves this
-    queue once it's actually been scanned successfully, however many
-    runs that takes.
+    Capped at config.MAX_SCAN_RETRY_PER_RUN per run -- same reasoning as
+    the Overpass retry queue's cap: without one, enough stuck slices
+    accumulating at once could make a single run slow, even though each
+    individual slice is expected to be rare. Anything beyond the cap is
+    left untouched and simply retried on a later run. Never capped on
+    ATTEMPTS though: a range only leaves this queue once it's actually
+    been scanned successfully, however many runs that takes.
 
     Returns (rows, still_pending, newly_pending_overpass) -- rows are
     findings from any newly discovered changesets in a range that
@@ -165,7 +166,10 @@ def retry_pending_scans(pending_scans):
     still_pending = []
     newly_pending_overpass = []
 
-    for entry in pending_scans:
+    to_process = pending_scans[:config.MAX_SCAN_RETRY_PER_RUN]
+    remainder = pending_scans[config.MAX_SCAN_RETRY_PER_RUN:]
+
+    for entry in to_process:
         start_dt = datetime.fromisoformat(entry["start"])
         end_dt = datetime.fromisoformat(entry["end"])
         try:
@@ -198,6 +202,11 @@ def retry_pending_scans(pending_scans):
             except Exception:
                 log.exception("Failed processing changeset %s from a resolved scan range -- skipping it", cs.get("id"))
 
+    if remainder:
+        log.info("Scan-retry queue larger than the per-run cap (%d) -- %d range(s) deferred to a later run",
+                  config.MAX_SCAN_RETRY_PER_RUN, len(remainder))
+
+    still_pending.extend(remainder)
     return rows, still_pending, newly_pending_overpass
 
 
