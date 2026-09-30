@@ -114,10 +114,26 @@ def fetch_changesets_in_window(start_dt, end_dt):
     query from blocking the entire pipeline's forward progress forever,
     while still guaranteeing that sub-range gets checked eventually.
     """
+    if not config.HASHTAG or len(config.HASHTAG.strip()) < 3:
+        # A missing or near-empty HASHTAG turns the search string into
+        # just "#" (or close to it) -- which matches almost ANY
+        # changeset, since huge numbers of real-world edits mention some
+        # unrelated hashtag (their editor's own auto-tag, a different
+        # campaign, etc.). That silently turns "find our campaign's
+        # changesets" into "find changesets from the entire planet",
+        # with no error, no warning -- just a flood of unrelated,
+        # geographically random false positives. Fail loudly instead.
+        raise ValueError(
+            f"config.HASHTAG is empty or too short ({config.HASHTAG!r}) -- "
+            f"refusing to scan, since this would match almost any changeset "
+            f"on the planet instead of a specific campaign's."
+        )
+
     found = {}
     unresolved = []
     cursor_end = end_dt
     hashtag_needle = f"#{config.HASHTAG}".lower()
+    log.info("Matching changesets against hashtag needle: %r", hashtag_needle)
 
     while True:
         params = {
@@ -143,7 +159,16 @@ def fetch_changesets_in_window(start_dt, end_dt):
         for cs in data:
             tags = cs.get("tags", {})
             haystack = " ".join([tags.get("comment", ""), tags.get("hashtags", "")]).lower()
-            if hashtag_needle in haystack:
+            idx = haystack.find(hashtag_needle)
+            if idx == -1:
+                continue
+            # Require a non-alphanumeric boundary right after the match (or
+            # end of string) -- otherwise "#MapCupAPAC2026" would also
+            # incorrectly match a longer, different hashtag like
+            # "#MapCupAPAC2026Kenya" that merely starts with the same text.
+            end_idx = idx + len(hashtag_needle)
+            boundary_ok = end_idx >= len(haystack) or not haystack[end_idx].isalnum()
+            if boundary_ok:
                 found[cs["id"]] = cs
 
         if len(data) < 100:
