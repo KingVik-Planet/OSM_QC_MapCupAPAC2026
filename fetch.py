@@ -5,7 +5,7 @@ down the data needed to run checks on them.
 """
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import requests
 import xml.etree.ElementTree as ET
@@ -91,103 +91,6 @@ def _parse_osm_dt(s):
     return datetime.strptime(s.replace("Z", ""), "%Y-%m-%dT%H:%M:%S")
 
 
-# Below this width, a stuck range is NOT split further -- OSM timestamps
-# are whole-second resolution, so a 1-second window has no meaningful
-# smaller unit to try. A range already this narrow that still fails goes
-# straight into the permanent retry queue, same as before this existed.
-MIN_SPLIT_SECONDS = 1
-
-# Caps how many times fetch_changesets_in_window will split a stuck range
-# in ONE call. Without this, a rare but possible total failure right at
-# the top of a wide (e.g. full-hour) query could cascade into thousands
-# of tiny leaf queries in a single run -- exactly the kind of runaway,
-# unbounded run time this pipeline has otherwise been built to prevent.
-# Once the budget is used up, whatever range remains is queued as one
-# chunk instead of being subdivided further -- still retried later,
-# just not infinitely split in the same run.
-MAX_SPLITS_PER_CALL = 8
-
-
-def _matches_hashtag(cs, hashtag_needle):
-    tags = cs.get("tags", {})
-    haystack = " ".join([tags.get("comment", ""), tags.get("hashtags", "")]).lower()
-    idx = haystack.find(hashtag_needle)
-    if idx == -1:
-        return False
-    # Require a non-alphanumeric boundary right after the match (or end of
-    # string) -- otherwise "#MapCupAPAC2026" would also incorrectly match
-    # a longer, different hashtag like "#MapCupAPAC2026Kenya" that merely
-    # starts with the same text.
-    end_idx = idx + len(hashtag_needle)
-    return end_idx >= len(haystack) or not haystack[end_idx].isalnum()
-
-
-def _scan_range(start_dt, end_dt, hashtag_needle, found, unresolved, split_budget):
-    """
-    Fetches every matching changeset in [start_dt, end_dt), paging
-    backward via cursor narrowing. On a persistent page failure, splits
-    the remaining range in half and retries each half independently --
-    a narrower query sometimes succeeds where a wider one that covers
-    the same stuck instant does not, so this isolates the actual problem
-    to the smallest possible slice instead of giving up on the whole
-    thing. Only once a range can no longer be meaningfully split (at
-    MIN_SPLIT_SECONDS) or the per-call split budget is exhausted does a
-    persistent failure get recorded in `unresolved` for later retry.
-    """
-    cursor_end = end_dt
-    while True:
-        params = {
-            "time": f"{start_dt.isoformat()}Z,{cursor_end.isoformat()}Z",
-            "closed": "true",
-        }
-        try:
-            resp = _get(f"{config.OSM_API_BASE}/changesets.json", params=params)
-        except requests.RequestException as e:
-            span_s = int((cursor_end - start_dt).total_seconds())
-            if span_s > MIN_SPLIT_SECONDS and split_budget[0] > 0:
-                split_budget[0] -= 1
-                # Whole-second boundary only -- OSM timestamps have no
-                # finer resolution, so a fractional split point would be
-                # meaningless (and could confuse the API or duplicate/
-                # skip results right at that boundary).
-                mid = start_dt + timedelta(seconds=span_s // 2)
-                log.info(
-                    "Query for %s to %s failed -- splitting into two smaller "
-                    "sub-ranges and retrying each independently (%d split(s) "
-                    "left this call): %s",
-                    start_dt.isoformat(), cursor_end.isoformat(), split_budget[0], e,
-                )
-                _scan_range(start_dt, mid, hashtag_needle, found, unresolved, split_budget)
-                _scan_range(mid, cursor_end, hashtag_needle, found, unresolved, split_budget)
-            else:
-                reason = "cannot be split further" if span_s <= MIN_SPLIT_SECONDS else "split budget exhausted this run"
-                log.warning(
-                    "Persistent failure scanning changesets from %s to %s (%s) "
-                    "-- queuing for later retry instead of blocking the whole "
-                    "window: %s",
-                    start_dt.isoformat(), cursor_end.isoformat(), reason, e,
-                )
-                unresolved.append((start_dt.isoformat(), cursor_end.isoformat()))
-            return
-
-        data = resp.json().get("changesets", [])
-        if not data:
-            return
-
-        for cs in data:
-            if _matches_hashtag(cs, hashtag_needle):
-                found[cs["id"]] = cs
-
-        if len(data) < 100:
-            return  # reached the last page
-
-        oldest_seen = min((c.get("closed_at") or c.get("created_at")) for c in data)
-        new_cursor_end = _parse_osm_dt(oldest_seen)
-        if new_cursor_end <= start_dt or new_cursor_end >= cursor_end:
-            return
-        cursor_end = new_cursor_end
-
-
 def fetch_changesets_in_window(start_dt, end_dt):
     """
     Returns (found, unresolved) for every changeset worldwide that
@@ -203,15 +106,13 @@ def fetch_changesets_in_window(start_dt, end_dt):
     retried inside _get(), still failing -- not a brief blip but a
     genuinely stuck query, which does happen for some narrow historical
     slices), this does NOT raise and does NOT silently drop that data.
-    It first tries splitting the stuck range into smaller pieces (see
-    _scan_range) to isolate the problem to the narrowest possible slice;
-    whatever still can't be resolved after that comes back as
-    `unresolved`, a list of (start_iso, end_iso) strings. The caller
-    must queue these for a later retry -- e.g. via storage's
-    pending-changeset-scan queue -- rather than treat the window as
-    fully scanned. This is what stops one permanently-stuck query from
-    blocking the entire pipeline's forward progress forever, while still
-    guaranteeing every sub-range gets checked eventually.
+    Instead it stops paginating further and returns the sub-range that
+    couldn't be scanned as `unresolved`, a list of (start_iso, end_iso)
+    strings. The caller must queue these for a later retry -- e.g. via
+    storage's pending-changeset-scan queue -- rather than treat the
+    window as fully scanned. This is what stops one permanently-stuck
+    query from blocking the entire pipeline's forward progress forever,
+    while still guaranteeing that sub-range gets checked eventually.
     """
     if not config.HASHTAG or len(config.HASHTAG.strip()) < 3:
         # A missing or near-empty HASHTAG turns the search string into
@@ -230,11 +131,54 @@ def fetch_changesets_in_window(start_dt, end_dt):
 
     found = {}
     unresolved = []
+    cursor_end = end_dt
     hashtag_needle = f"#{config.HASHTAG}".lower()
     log.info("Matching changesets against hashtag needle: %r", hashtag_needle)
 
-    split_budget = [MAX_SPLITS_PER_CALL]
-    _scan_range(start_dt, end_dt, hashtag_needle, found, unresolved, split_budget)
+    while True:
+        params = {
+            "time": f"{start_dt.isoformat()}Z,{cursor_end.isoformat()}Z",
+            "closed": "true",
+        }
+        try:
+            resp = _get(f"{config.OSM_API_BASE}/changesets.json", params=params)
+        except requests.RequestException as e:
+            log.warning(
+                "Persistent failure scanning changesets from %s to %s -- "
+                "queuing this slice for later retry instead of blocking "
+                "the whole window: %s",
+                start_dt.isoformat(), cursor_end.isoformat(), e,
+            )
+            unresolved.append((start_dt.isoformat(), cursor_end.isoformat()))
+            break
+
+        data = resp.json().get("changesets", [])
+        if not data:
+            break
+
+        for cs in data:
+            tags = cs.get("tags", {})
+            haystack = " ".join([tags.get("comment", ""), tags.get("hashtags", "")]).lower()
+            idx = haystack.find(hashtag_needle)
+            if idx == -1:
+                continue
+            # Require a non-alphanumeric boundary right after the match (or
+            # end of string) -- otherwise "#MapCupAPAC2026" would also
+            # incorrectly match a longer, different hashtag like
+            # "#MapCupAPAC2026Kenya" that merely starts with the same text.
+            end_idx = idx + len(hashtag_needle)
+            boundary_ok = end_idx >= len(haystack) or not haystack[end_idx].isalnum()
+            if boundary_ok:
+                found[cs["id"]] = cs
+
+        if len(data) < 100:
+            break  # reached the last page
+
+        oldest_seen = min((c.get("closed_at") or c.get("created_at")) for c in data)
+        new_cursor_end = _parse_osm_dt(oldest_seen)
+        if new_cursor_end <= start_dt or new_cursor_end >= cursor_end:
+            break
+        cursor_end = new_cursor_end
 
     return list(found.values()), unresolved
 
