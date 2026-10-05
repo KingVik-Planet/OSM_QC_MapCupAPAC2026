@@ -4,8 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2bf29c3a-fdc7-4ac9-89df-528d6ebf3b18" name="Changes" comment="Quality check run 2026-09-30 23:15 UTC">
-      <changelist_data name="osm-quality-bot" email="actions@users.noreply.github.com" automatic="false" />
+    <list default="true" id="2bf29c3a-fdc7-4ac9-89df-528d6ebf3b18" name="Changes" comment="Merge remote-tracking branch 'origin/master'">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -70,10 +70,41 @@
       <option name="presentableId" value="Default" />
       <updated>1790725537787</updated>
     </task>
+    <task id="LOCAL-00001" summary="Updated Hashtag">
+      <option name="closed" value="true" />
+      <created>1791158636042</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1791158636042</updated>
+    </task>
+    <task id="LOCAL-00002" summary="Updated Hashtag">
+      <option name="closed" value="true" />
+      <created>1791158736115</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1791158736115</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Quality check run 2026-09-30 23:15 UTC" />
-    <option name="LAST_COMMIT_MESSAGE" value="Quality check run 2026-09-30 23:15 UTC" />
+    <MESSAGE value="Merge branch 'master' of https://github.com/KingVik-Planet/OSM_QC_MapCupAPAC2026&#10;# Please enter a commit message to explain why this merge is necessary,&#10;# especially if it merges an updated upstream into a topic branch.&#10;#&#10;# Lines starting with '#' will be ignored, and an empty message aborts&#10;# the commit." />
+    <MESSAGE value="Updated Hashtag" />
+    <MESSAGE value="Merge remote-tracking branch 'origin/master'" />
+    <option name="LAST_COMMIT_MESSAGE" value="Merge remote-tracking branch 'origin/master'" />
   </component>
 </project>
