@@ -80,9 +80,21 @@ def retry_pending(pending_list):
        remaining item would just fail the same way and get re-queued
        anyway, so there's no point paying for their metadata/diff
        fetches once we already know Overpass is down for this run.
+
+    FAIRNESS: when the breaker trips partway through a batch, everything
+    from that point on was never actually attempted this run -- just
+    skipped. Those skipped items are put back at the FRONT of the queue
+    (ahead of items that genuinely got tried and failed), so next run
+    gives them the first chance instead of the same front few items
+    monopolizing every attempt forever. Without this, whenever Overpass
+    tends to be down right at the start of a run (which is common), only
+    the one item at position 0 would ever get retried, run after run,
+    while the rest of a large backlog sat frozen, technically "queued"
+    but never actually re-tried in practice.
     """
     rows = []
-    still_pending = []
+    skipped = []           # never attempted this run -- give these priority next time
+    attempted_failed = []  # genuinely tried and failed -- they just had their turn
 
     to_process = pending_list[:config.MAX_RETRY_PER_RUN]
     remainder = pending_list[config.MAX_RETRY_PER_RUN:]
@@ -91,7 +103,7 @@ def retry_pending(pending_list):
     for i, entry in enumerate(to_process):
         if fetch.overpass_circuit_is_open():
             stopped_early_at = i
-            still_pending.extend(to_process[i:])
+            skipped.extend(to_process[i:])
             break
 
         cs_id = entry["changeset_id"]
@@ -99,7 +111,7 @@ def retry_pending(pending_list):
         if cs_meta is None:
             entry["meta_fetch_failures"] = entry.get("meta_fetch_failures", 0) + 1
             if entry["meta_fetch_failures"] < MAX_META_FETCH_FAILURES:
-                still_pending.append(entry)
+                attempted_failed.append(entry)
             else:
                 log.warning(
                     "Giving up on changeset %s after %d failed metadata fetches "
@@ -115,12 +127,12 @@ def retry_pending(pending_list):
         except Exception:
             log.exception("Retry failed for pending changeset %s -- keeping it queued", cs_id)
             entry["overpass_attempts"] = entry.get("overpass_attempts", 0) + 1
-            still_pending.append(entry)
+            attempted_failed.append(entry)
             continue
 
         if incomplete:
             entry["overpass_attempts"] = entry.get("overpass_attempts", 0) + 1
-            still_pending.append(entry)
+            attempted_failed.append(entry)
         else:
             log.info(
                 "Recheck succeeded for changeset %s (%s) after %d attempt(s): %d issue(s)",
@@ -131,14 +143,18 @@ def retry_pending(pending_list):
     if stopped_early_at is not None:
         log.warning(
             "Overpass circuit breaker tripped while processing the retry queue -- "
-            "stopped after %d item(s), %d left untouched this run (still queued)",
+            "stopped after %d item(s), %d left untouched this run (moved to the front "
+            "of the queue so they get first priority next run)",
             stopped_early_at, len(to_process) - stopped_early_at,
         )
     if remainder:
         log.info("Retry queue larger than the per-run cap (%d) -- %d item(s) deferred to a later run",
                   config.MAX_RETRY_PER_RUN, len(remainder))
 
-    still_pending.extend(remainder)
+    # Skipped items go first (their turn is overdue), then items that were
+    # actually attempted and failed (they just had a fair shot), then the
+    # untouched remainder beyond this run's cap.
+    still_pending = skipped + attempted_failed + remainder
     return rows, still_pending
 
 
